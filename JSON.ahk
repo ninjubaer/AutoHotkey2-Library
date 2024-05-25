@@ -9,7 +9,7 @@
 
 Class JSON {
 	static null := ComValue(1, 0), true := ComValue(0xB, 1), false := ComValue(0xB, 0)
-	static stringify(obj, indent := false) {
+	static stringify(obj, indent := 1) {
 		static CRLF := "`r`n"
 		return d(obj)
 		d(o, level := false) {
@@ -30,8 +30,11 @@ Class JSON {
 			}
 		}
 		GetIndent(lvl) {
+			if indent is Integer
+				loop indent
+					ind .= " "
 			loop lvl
-				indentOut .= indent
+				indentOut .= ind ?? indent
 			return IsSet(indentOut) && indent !== false ? indentOut : ""
 		}
 	}
