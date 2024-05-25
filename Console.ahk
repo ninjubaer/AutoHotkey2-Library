@@ -5,7 +5,7 @@
  * @date 2024/05/25
  * @version 0.0.1
  ***********************************************************************/
-
+#Include <JSON>
 class Console {
 	static colors := {
 		black: 0,
@@ -27,6 +27,8 @@ class Console {
 	}
 	static __New() => !this.hConsole ? DllCall("AllocConsole") : ""
 	static log(text, color := "white", handle?) {
+		if IsObject(text)
+			text := JSON.stringify(text)
 		if !this.colors.HasProp(color)
 			color := "white"
 		DllCall("SetConsoleTextAttribute", "Ptr", this.hConsole, "UShort", this.colors.%color%)

@@ -9,10 +9,11 @@
 
 Class __ArrEx extends Array {
 	static __new() => (
-		super.Prototype.includes := ObjBindMethod(this, '__includes'),
-		super.Prototype.forEach := ObjBindMethod(this, 'forEach')
+		super.Prototype.includes := ObjBindMethod(this, 'includes'),
+		super.Prototype.forEach := ObjBindMethod(this, 'forEach'),
+		super.Prototype.find := ObjBindMethod(this, 'find')
 	)
-	static __includes(obj, val, sensitivity?) {
+	static includes(obj, val, sensitivity?) {
 		for i, j in obj
 			if sensitivity ?? false {
 				if j == val
@@ -27,4 +28,12 @@ Class __ArrEx extends Array {
 			(func.MinParams > 1 ? (func)(i,j) : (func)(j))
 		return true
 	}
+	static find(obj, func) {
+		newArr := []
+		for i,j in obj
+			if (func.MinParams > 1 ? (func)(i,j) : (func)(j))
+				newArr.push(j)
+		return newArr
+	}
 }
+

@@ -21,7 +21,7 @@ Class JSON {
 					out := "[" (indent !== false ? CRLF : "")
 					for i, j in o
 						out .= GetIndent(level + 1) d(j, level + 1) . "," . (indent !== false ? CRLF : "")
-					return SubStr(out, 1, indent !== false ? -3 : -1) . (indent !== false ? CRLF . GetIndent(level) : "") . "]"
+					return StrLen(out) > (indent !== false ? 3 : 1) ? SubStr(out, 1, indent !== false ? -3 : -1) . (indent !== false ? CRLF . GetIndent(level) : "") . "]" : "[]"
 				default:
 					out := "{" . (indent !== false ? CRLF : "")
 					for i, j in t = "Map" || t = "Gui" ? o : o.OwnProps()
