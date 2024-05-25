@@ -7,21 +7,15 @@
  ***********************************************************************/
 
 Class __StringEx extends String {
-	static __New() => (
-		Super.Prototype.__Enum := ObjBindMethod(this, "__Enum"),
-		Super.Prototype.slice := Super.Prototype.substring := ObjBindMethod(this, "slice"),
-		Super.Prototype.upper := ObjBindMethod(this, "upper"),
-		Super.Prototype.lower := ObjBindMethod(this, "lower"),
-		Super.Prototype.first := ObjBindMethod(this, "first"),
-		objDefineProps := Object.Prototype.DefineProp,
-		objDefineProps(Super.Prototype,
-			"__item", {
-				get: (self, index) => SubStr(self, index, 1),
-				set: (self, value, index) => unset
-			}),
-		Super.Prototype.len := ObjBindMethod(this, "len"),
-		this
-	)
+	static __New() {
+		Super.Prototype.__Enum := ObjBindMethod(this, "__Enum")
+		Super.Prototype.slice := Super.Prototype.substring := ObjBindMethod(this, "slice")
+		Super.Prototype.upper := ObjBindMethod(this, "upper")
+		Super.Prototype.lower := ObjBindMethod(this, "lower")
+		Super.Prototype.first := ObjBindMethod(this, "first")
+		Super.Prototype.len := ObjBindMethod(this, "len")
+		return this
+	}
 	static __Enum(str, num) =>
 		StrSplit(str).__Enum(num)
 	static slice(p*) => SubStr(p*)

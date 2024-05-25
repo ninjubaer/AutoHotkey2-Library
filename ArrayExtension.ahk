@@ -6,13 +6,12 @@
  * @version 0.0.1
  ***********************************************************************/
 
-
 Class __ArrEx extends Array {
 	static __new() => (
-		super.Prototype.includes := ObjBindMethod(this, 'includes'),
-		super.Prototype.forEach := ObjBindMethod(this, 'forEach'),
-		super.Prototype.find := ObjBindMethod(this, 'find'),
-		super.Prototype.filter := ObjBindMethod(this, 'filter')
+		[].Base.includes := ObjBindMethod(this, 'includes'),
+		[].Base.forEach := ObjBindMethod(this, 'forEach'),
+		[].Base.find := ObjBindMethod(this, 'find'),
+		[].Base.filter := ObjBindMethod(this, 'filter')
 	)
 	static includes(obj, val, sensitivity?) {
 		for i, j in obj
