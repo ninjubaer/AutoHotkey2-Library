@@ -22,12 +22,15 @@ Class Thread {
 		}
 		return this
 	}
+
 	threadProc(cb, args) {
 		this.state := 1
 		(cb)(args*)
-		ObjRelease(ObjPtr(args))
+		try ObjRelease(ObjPtr(args))
 		this.state := 0
 	}
+	attach() => (OnExit((*) => this.join(), -1), this)
+	detach() => (OnExit((*) => this.ForceDelete(), -1), this)
 	setTimeout(ms) => (SetTimer(this.ForceDelete.Bind(this), ms), this)
 	__Delete() {
 		this.Join()
@@ -65,3 +68,27 @@ Class Thread {
 		get => (this.threadptr ? DllCall("GetThreadDescription", "ptr", this.threadptr, "strp", &desc:="") : "", desc)
 	}
 }
+/* Class ThreadPool extends Thread {
+	__New(minAmount:=1, maxAmount?) {
+		this.minAmount := minAmount, this.maxAmount := maxAmount ?? minAmount
+		if this.minAmount > this.maxAmount
+			throw Error("minAmount must be less than or equal to maxAmount")
+		this.threads:=[], this.queue:=[]
+		loop this.minAmount
+			this.threads.push(Thread(this.threadPoolProc.Bind(this)))
+	}
+	threadPoolProc() {
+		While !(this.threads.Length > this.minAmount) {
+			While this.queue.Length {
+				func := this.queue.RemoveAt(1)
+				func.cb.call(func.args*)
+			}
+		}
+	}
+	append(cb, args*) {
+		this.queue.push({cb:cb, args:args})
+		sleep 50
+		if this.threads.Length < this.maxAmount && this.queue.Length
+			this.threads.push(Thread(this.threadPoolProc.Bind(this)))
+	}
+} */
