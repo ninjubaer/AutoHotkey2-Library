@@ -5,16 +5,17 @@ Class Socket {
 	static msgNum := 0x6969
 	static FD_READ := 0x01, FD_ACCEPT := 0x08, FD_CLOSE := 0x32
 	__New(eventObj,socket := -1) {
-		if (this.IPPROTO = -1)
-			Throw Error("Start with SocketTCP or SocketUDP")
-		this.eventObj := eventObj
-		#DllLoad "ws2_32.dll"
-		WSADATA := Buffer(394 + A_PtrSize, 0)
-		if err := DllCall("ws2_32\WSAStartup","ushort", 0x202, "ptr", WSADATA,) ; 0x202 = Winsock version 2.2
-			Throw OSError(err)
-		if NumGet(WSADATA, 2, 'ushort') != 0x202
-			Throw Error("Winsock version 2.2 not available")
+		static init := (() {
+			#DllLoad "ws2_32.dll"
+			WSADATA := Buffer(394 + A_PtrSize, 0)
+			if err := DllCall("ws2_32\WSAStartup","ushort", 0x202, "ptr", WSADATA,) ; 0x202 = Winsock version 2.2
+				Throw OSError(err)
+			if NumGet(WSADATA, 2, 'ushort') != 0x202
+				Throw Error("Winsock version 2.2 not available")
+		})()
+		this.eventObj := eventObj, this.IPPROTO := 0
 		this.sock := socket
+		return this
 	}
 	closeSocket(){
 		if (DllCall("ws2_32\closesocket", "ptr", this.sock) = -1)
@@ -30,7 +31,7 @@ Class Socket {
 	Bind(host, port) {
 		if this.sock != -1
 			Throw Error("Socket already exists")
-		this.sock := DllCall("ws2_32\socket", "int", this.IPPROTO, "int", 1, "int", 0)
+		this.sock := DllCall("ws2_32\socket", "int", 2, "int", 1, "int", this.IPPROTO)
 		if (DllCall("ws2_32\inet_addr", "str", host) = -1) || !RegExMatch(host, "^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$")
 			Throw Error("Invalid IP address")
 		addr := Buffer(16, 0)
@@ -71,13 +72,17 @@ Class Socket {
 		Throw OSError(Socket.lastError)
 	}
 	accept() {
-		if (sock := DllCall("ws2_32\accept", "ptr", this.sock, "ptr", 0, "ptr", 0))
+		if !(sock := DllCall("ws2_32\accept", "ptr", this.sock, "ptr", 0, "ptr", 0))
 			Throw OSError(Socket.lastError)
-		return 
+		return Socket({}, sock)
 	}
 } 
 Class SocketTCP extends Socket {
 	static IPPROTO := 6
+	__New(eventObj) {
+		base := super.__New(eventObj)
+		base.IPPROTO := SocketTCP.IPPROTO
+	}
 }
 Persistent
 s:=SocketTCP({
@@ -85,7 +90,7 @@ s:=SocketTCP({
 		msgbox 'recv'
 	},
 	accept: (self){
-		
+		msgbox (client := self.accept()).sock
 	},
 	disconnect: (self){
 		msgbox 'disconnect'
@@ -93,5 +98,5 @@ s:=SocketTCP({
 })
 s.Bind('0.0.0.0', 6969)
 s.listen()
-msgbox 'listening...'
+msgbox 'listening'
 ExitApp
