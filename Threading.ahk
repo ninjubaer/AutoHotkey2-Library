@@ -6,7 +6,7 @@
  * @version 0.0.1
  ***********************************************************************/
 #include <Console>
-Class Thread {
+export Class Thread {
 	__New(cb, args*) {
 		this.callback := CallbackCreate(cb)
 		if !(this.threadptr := DllCall("CreateThread", "ptr", 0, "uint", 0, "ptr", this.callback, "ptr", ObjPtrAddRef(args), "uint", 0, "ptrP", &tid := 0))
@@ -53,7 +53,7 @@ Class Thread {
 		get => (this.threadptr ? DllCall("GetThreadDescription", "ptr", this.threadptr, "strp", &desc := "") : "", desc)
 	}
 }
-Class ThreadPool {
+export Class ThreadPool {
 	__New(min, max) {
 		this.min:=min,this.max := max, this.queue := []
 		this.ptr := DllCall("CreateThreadpool", "ptr", 0, "ptr")
@@ -106,3 +106,4 @@ Class ThreadPool {
 	}
 	static lastError => DllCall("GetLastError", "uint")
 }
+export Sleep(ms) => DllCall("Sleep", "uint", ms)
