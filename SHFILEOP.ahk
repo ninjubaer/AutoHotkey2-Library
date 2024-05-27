@@ -5,7 +5,6 @@
  * @date 2024/05/27
  * @version 0.0.1
  ***********************************************************************/
-
 Class SHFILEOP {
 	static operations := { move: 0x1, copy: 0x2, delete: 0x3, rename: 0x4 }
 	static fFlags := {
@@ -47,6 +46,16 @@ Class SHFILEOP {
 		161: "Bad path name",
 		206: "Path too long",
 		995: "Operation cancelled"
+	}
+	Class _SHFILEOPSTRUCT {
+		hwnd: uptr
+		wFunc: u32
+		pFrom: iptr
+		pTo: iptr
+		fFlags: u32
+		fAnyOperationsAborted: i8
+		hNameMappings: uptr
+		lpszProgressTitle: iptr
 	}
 	static move(sourceDir, destDir, flags := this.fFlags.FOF_SILENT | this.fFlags.FOF_NOCONFIRMATION | this.fFlags.FOF_NOERRORUI, &errormsg:=false) {
 		SHFILEOPSTRUCT := this._SHFILEOPSTRUCT()
@@ -92,14 +101,4 @@ Class SHFILEOP {
 		return r
 	}
 
-	Class _SHFILEOPSTRUCT {
-		hwnd: uptr
-		wFunc: u32
-		pFrom: iptr
-		pTo: iptr
-		fFlags: u32
-		fAnyOperationsAborted: i8
-		hNameMappings: uptr
-		lpszProgressTitle: iptr
-	}
 }
