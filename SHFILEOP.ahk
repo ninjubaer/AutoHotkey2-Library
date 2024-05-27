@@ -6,7 +6,6 @@
  * @version 0.0.1
  ***********************************************************************/
 
-
 Class SHFILEOP {
 	static operations := { move: 0x1, copy: 0x2, delete: 0x3, rename: 0x4 }
 	static fFlags := {
@@ -81,6 +80,18 @@ Class SHFILEOP {
 			errormsg := this.return.%r%
 		return r
 	}
+	static rename(sourceDir, destDir, flags := this.fFlags.FOF_SILENT | this.fFlags.FOF_NOCONFIRMATION | this.fFlags.FOF_NOERRORUI, &errormsg:=false) {
+		SHFILEOPSTRUCT := this._SHFILEOPSTRUCT()
+		SHFILEOPSTRUCT.wFunc := this.operations.rename
+		SHFILEOPSTRUCT.pFrom := StrPtr(sourceDir)
+		SHFILEOPSTRUCT.pTo := StrPtr(destDir)
+		SHFILEOPSTRUCT.fFlags := flags
+		r:= DllCall("shell32\SHFileOperationW", "Ptr", SHFILEOPSTRUCT)
+		if this.return.HasProp(r)
+			errormsg := this.return.%r%
+		return r
+	}
+
 	Class _SHFILEOPSTRUCT {
 		hwnd: uptr
 		wFunc: u32
