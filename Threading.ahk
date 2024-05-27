@@ -34,7 +34,7 @@ export Class Thread {
 		}
 		return this
 	}
-	__Delete() => (msgbox('delete'),this.ForceDelete())
+	__Delete() => (this.ForceDelete(), this)
 	ForceDelete() {
 		CallbackFree(this.callback)
 		if this.threadptr {
