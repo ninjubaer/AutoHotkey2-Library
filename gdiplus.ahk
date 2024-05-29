@@ -1,5 +1,16 @@
+/************************************************************************
+ * @description Object Oriented GDI+ Library for AutoHotkey
+ * @file gdiplus.ahk
+ * @author ninju
+ * @date 2024/05/29
+ * @version 0.0.1
+ ***********************************************************************/
+
 ;import { msgbox } from msgbox
 Class Gdip {
+	;?=======================
+	;?========Start Up=======
+	;?=======================
 	static __New() {
 		#DllLoad GdiPlus.dll
 		input := Buffer(8 + 2 * A_PtrSize, 0)
@@ -7,19 +18,49 @@ Class Gdip {
 		this.pToken := (DllCall("GdiPlus\GdiplusStartup", "uintp", &_ := 0, "ptr", input, "uptr", 0), _)
 		OnExit(this.__Delete.Bind(this))
 	}
+	;?=======================
+	;?=======Shut Down=======
+	;?=======================
 	static __Delete(*) {
 		DllCall("GdiPlus\GdiplusShutdown", "uint", this.pToken)
 	}
+	;?=======================
 	static deleteObject(handle) => DllCall("gdi32\DeleteObject", "uptr", handle)
+	static UpdateLayeredWindow(hwnd, hdc, x?, y?, w?, h?, a:=255) {
+		if IsSet(x) && IsSet(y) && x is Number && y is Number
+			point := this.Point(x, y)
+		if !IsSet(w) || !IsSet(h) || not (w is Number) || not (h is Number)
+			rect := this.WinGetRect(hwnd), w := rect.w, h := rect.h
+		return DllCall(
+			"user32\UpdateLayeredWindow",
+			"uptr", hwnd,
+			"uptr", 0,
+			"ptr", point ?? 0,
+			"int64p", w | (h << 32),
+			"uptr", hdc,
+			"int64p", 0,
+			"uint", 0,
+			"uintp", (Alpha??0)<<16|1<<24,
+			"uint", 2
+		)
+	}
+	static WinGetRect(hwnd) {
+		rect := this.Rect()
+		DllCall("GetWindowRect", "uptr", hwnd, "ptr", rect)
+		return rect
+	}
+	;?=======================
+	;?=======================
+	;?========Bitmaps========
+	;?=======================
 	/**
-	 * 
 	 * @param x 
 	 * @param y 
 	 * @param w 
 	 * @param h 
-	 * @returns {Bitmap | Number}
-	 * Bitmap: success
-	 * -1: invalid coordinates
+	 * @returns {Bitmap | unset}
+	 * *Bitmap: success
+	 * *unset: failed
 	 */
 	static BitmapFromScreen(x?, y?, w?, h?) {
 		if !IsSet(x) || !IsSet(y) || !IsSet(w) || !IsSet(h)
@@ -36,22 +77,10 @@ Class Gdip {
 		CDC.__Delete()
 		return bm
 	}
-	static BitBlt(hdcDest, x, y, w, h, hdcSrc, x1, y1, raster?) =>
-		DllCall("gdi32\BitBlt"
-			, "UPtr", hdcDest
-			, "Int", x
-			, "Int", y
-			, "Int", w
-			, "Int", h
-			, "UPtr", hdcSrc
-			, "Int", x1
-			, "Int", y1
-			, "UInt", Raster ?? 0x00CC0020)
-	static CreateBitmap(w, h, f := 0x26200A) => Gdip.Bitmap(w,h,f)
+	static CreateBitmap(w, h, f := 0x26200A) => Gdip.Bitmap(w, h, f)
 	static CreateDIBSection(w, h, hdc := 0, bpp := 32, &_?) {
 		_hdc := hdc || this.GetDC()
-		BIH := this.BITMAPINFOHEADER()
-		BIH.biWidth := w, BIH.biHeight := h, BIH.biBitCount := bpp
+		BIH := this.BITMAPINFOHEADER(w,h,bpp)
 		bm := this.Bitmap()
 		bm._handle := DllCall("gdi32\CreateDIBSection", "uptr", _hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0)
 		if !hdc
@@ -63,19 +92,50 @@ Class Gdip {
 		bm._handle := DllCall("gdi32\CreateCompatibleBitmap", "uptr", hdc, "int", w, "int", h, "uptr", 0)
 		return bm
 	}
-	class BITMAPINFOHEADER {
-		biSize: u32 := ObjGetDataSize(this)
-		biWidth: i32
-		biHeight: i32
-		biPlanes: u16 := 1
-		biBitCount: u16
-		biCompression: u32
-		biSizeImage: u32
-		biXPelsPerMeter: i32
-		biYPelsPerMeter: i32
-		biClrUsed: u32
-		biClrImportant: u32
+	;?=======================
+	;?==========hDC==========
+	;?=======================
+	static BitBlt(hdcDest, x, y, w, h, hdcSrc, x1, y1, raster?) =>
+		DllCall("gdi32\BitBlt"
+			, "UPtr", hdcDest
+			, "Int", x
+			, "Int", y
+			, "Int", w
+			, "Int", h
+			, "UPtr", hdcSrc
+			, "Int", x1
+			, "Int", y1
+			, "UInt", Raster ?? 0x00CC0020)
+			static CreateCompatibleDC(dc := 0) => (ndc := this.DC(), ndc.h := DllCall("CreateCompatibleDC", "uptr", dc is Gdip.DC ? dc.handle : dc), ndc)
+	static GetDC(hwnd?) => (dc := this.DC(), dc.h := DllCall("GetDC", "uptr", dc.hwnd := hwnd ?? 0), dc)
+	static GetDCEx(hwnd, region, flags) => (dc := this.DC(), dc.h := DllCall("GetDCEx", "uptr", hwnd, "ptr", region, "uint", flags), dc)
+	;?=======================
+	;?========Graphics=======
+	;?=======================
+	static GraphicsFromBitmap(bm) {
+		g := this.Graphics()
+		g.ptr := (DllCall("GdiPlus\GdipGetImageGraphicsContext", "ptr", bm, "uptrp", &_ := 0), _)
+		return g
 	}
+	static GraphicsFromDC(dc := 0) {
+		g := this.Graphics()
+		g.ptr := (DllCall("GdiPlus\GdipCreateFromHDC", "uptr", IsInteger(dc) ? dc : dc.handle, "uptrp", &_ := 0), _)
+		return g
+	}
+	static GraphicsFromHWND(hwnd) {
+		g := this.Graphics()
+		g.ptr := (DllCall("GdiPlus\GdipCreateFromHWND", "uptr", hwnd, "uptrp", &_ := 0), _)
+		return g
+	}
+	;?=======================
+	;?========Region=========
+	;?=======================
+	static CreateRegion() => (r := this.Region(), r.ptr := (DllCall("GdiPlus\GdipCreateRegion", "uptrp", &_ := 0), _), r)
+	static CreateRegionRect(x, y, w, h) => (r := this.Region(), r.ptr := (DllCall("GdiPlus\GdipCreateRegionRect", "float", x, "float", y, "float", w, "float", h, "uptrp", &_ := 0), _), r)
+	static CreateRegionPath(path) => (r := this.Region(), r.ptr := (DllCall("GdiPlus\GdipCreateRegionPath", "ptr", path, "uptrp", &_ := 0), _), r)
+	;?=======================
+	;?========Classes========
+	;?=======================
 	Class Bitmap {
 		_handle := 0, _ptr := 0
 		__Delete() {
@@ -96,12 +156,11 @@ Class Gdip {
 		w => (DllCall("gdiplus\GdipGetImageWidth", "ptr", this, "uintp", &_ := 0), _)
 		h => (DllCall("gdiplus\GdipGetImageHeight", "ptr", this, "uintp", &_ := 0), _)
 		/**
-		 * Gdip.Bitmap.save
 		 * @param {String} output output path of the saved bitmap
-		 * @param {Integer} quality quality of the saved bitmap, default is 95 only for jpeg images
-		 * @returns {this} 
-		 * this: success
-		 * unset: failed
+		 * @param {Integer} quality quality of the saved bitmap, only works for jpeg
+		 * @returns {this}
+		 * *this: success
+		 * *unset: failed
 		 */
 		save(output, quality := 95) {
 			SplitPath output, , , &ext
@@ -145,7 +204,7 @@ Class Gdip {
 		}
 	}
 	Class DC {
-		h := 0, hwnd := 0, _ptr := 0
+		h := 0, hwnd := 0
 		handle {
 			get {
 				if !this.h
@@ -161,9 +220,15 @@ Class Gdip {
 		}
 		ptr {
 			get {
-				if !this._ptr
-					this._ptr := (DllCall("GdiPlus\GdipCreateFromHDC", "uptr", this.h, "uptrp", &_ := 0), _)
-				return this._ptr
+				if !this.h
+					this.h := DllCall("GetDC", "uptr", 0)
+				return this.h
+			}
+			set {
+				if this.h ?? 0
+					this.release()
+				this.h := value
+				return Value
 			}
 		}
 		release() {
@@ -182,8 +247,6 @@ Class Gdip {
 		}
 		Delete() => DllCall("DeleteDC", "uptr", this.h)
 	}
-	static CreateCompatibleDC(dc := 0) => (ndc := this.DC(), ndc.h := DllCall("CreateCompatibleDC", "uptr", dc is Gdip.DC ? dc.handle : dc), ndc)
-	static GetDC(hwnd?) => (dc := this.DC(), dc.h := DllCall("GetDC", "uptr", dc.hwnd := hwnd ?? 0), dc)
 	Class Graphics {
 		ptr := 0
 		FillRectangle(brush, x, y, w, h) {
@@ -203,16 +266,16 @@ Class Gdip {
 			if !this.ptr
 				return unset
 			region := this.GetClipRegion()
-			this.SetClipRect(x-r, y-r, r*2, r*2, 4)
-			this.SetClipRect(x + w - r, y-r, r*2, r*2, 4)
-			this.SetClipRect(x-r, y + h - r, r*2, r*2, 4)
-			this.SetClipRect(x + w - r, y + h - r, r*2, r*2, 4)
+			this.SetClipRect(x - r, y - r, r * 2, r * 2, 4)
+			this.SetClipRect(x + w - r, y - r, r * 2, r * 2, 4)
+			this.SetClipRect(x - r, y + h - r, r * 2, r * 2, 4)
+			this.SetClipRect(x + w - r, y + h - r, r * 2, r * 2, 4)
 			this.FillRectangle(brush, x, y, w, h)
 			this.SetClipRegion(region)
-			this.FillEllipse(brush, x, y, r*2, r*2)
-			this.FillEllipse(brush, x + w - r*2, y, r*2, r*2)
-			this.FillEllipse(brush, x, y + h - r*2, r*2, r*2)
-			this.FillEllipse(brush, x + w - r*2, y + h - r*2, r*2, r*2)
+			this.FillEllipse(brush, x, y, r * 2, r * 2)
+			this.FillEllipse(brush, x + w - r * 2, y, r * 2, r * 2)
+			this.FillEllipse(brush, x, y + h - r * 2, r * 2, r * 2)
+			this.FillEllipse(brush, x + w - r * 2, y + h - r * 2, r * 2, r * 2)
 			region.Delete()
 			return this
 		}
@@ -240,11 +303,11 @@ Class Gdip {
 			pts := Buffer(8 * points.length, 0)
 			if points[1] is Array {
 				for i, point in points
-					NumPut("float", point[1], "float", point[2], pts, 8 * (i-1))
+					NumPut("float", point[1], "float", point[2], pts, 8 * (i - 1))
 			}
-			else 
+			else
 				for i, point in points
-					NumPut("float", point.x, "float", point.y, pts, 8 * (i-1))
+					NumPut("float", point.x, "float", point.y, pts, 8 * (i - 1))
 			return (DllCall(
 				"GdiPlus\GdipFillPolygon",
 				"ptr", this,
@@ -296,35 +359,69 @@ Class Gdip {
 				return unset
 			return (DllCall("GdiPlus\GdipSetClipRegion", "ptr", this.ptr, "ptr", region, "int", mode) ? unset : this)
 		}
+		/**
+		 * @param {String} text
+		 * @param {String} options
+		 * * s{size} : default 12
+		 * * x{x} : default 0
+		 * * y{y} : default 0
+		 * * w{width} : default 100
+		 * * h{height} : default 100
+		 * * align: {center|left/near|right/far} : default near
+		 * * vertical align: {vcenter|top/vnear|bottom/vfar} : default vnear
+		 * * NoWrap : default false
+		 * @param {Gdip.Brush} brush 
+		 * @param {String} font 
+		 * @param {Integer} flags
+		 * *StringFormatFlagsDirectionRightToLeft = 0x00000001
+		 * *StringFormatFlagsDirectionVertical = 0x00000002
+		 * *StringFormatFlagsNoFitBlackBox = 0x00000004
+		 * *StringFormatFlagsDisplayFormatControl = 0x00000020
+		 * *StringFormatFlagsNoFontFallback = 0x00000400
+		 * *StringFormatFlagsMeasureTrailingSpaces = 0x00000800
+		 * *StringFormatFlagsNoWrap = 0x00001000
+		 * *StringFormatFlagsLineLimit = 0x00002000
+		 * *StringFormatFlagsNoClip = 0x00004000
+		 * @returns {unset | Gdip.Graphics} 
+		 */
+		text(text, options, brush?, font:='Arial', flags?) {
+			static regex := {
+				size: "s\K[\-\d\.]+",
+				x: "x\K[\-\d\.]+",
+				y: "y\K[\-\d\.]+",
+				w: "w\K[\-\d\.]+",
+				h: "h\K[\-\d\.]+",
+				align: "(Near|Center|Far|Left|Right)",
+				valign: "(vNear|vCenter|vFar|Top|Bottom)",
+				NoWrap: "NoWrap"
+			}
+			if !this.ptr
+				return unset
+			_options := {size: 12, x: 0, y: 0, w: width ?? 100, h: height ?? 100, align: 0, valign: 0, NoWrap: 0}
+			for i, j in regex.OwnProps()
+				if (m:=(RegExMatch(options, 'i)' j, &match), match?match.0:""))
+					_options.%i% := StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(m, "v", ""), "Near", 0), "Center", 1), "Far", 2), "Left", 0), "Right", 2), "Top", 0), "Bottom", 2), "NoWrap", 0x1000)
+			_font := Gdip.Font(font, _options.size)
+			_format := Gdip.StringFormat()
+			_format.setAlignment(_options.align), _format.setLineAlignment(_options.valign), _format.setFormatFlags(_options.NoWrap | 0x4000 | (flags ?? 0))
+			_brush := brush ?? Gdip.Brush.Solid(0xFF000000)
+			rectF := Gdip.RectF(_options.x, _options.y, _options.w, _options.h)
+			return this.String(text, _font, _format, rectF, _brush)
+		}
 		String(str, hFont, hFormat, rectF, brush) {
 			if !this.ptr or !rectF is Gdip.RectF
 				return unset
 			return (DllCall(
 				"GdiPlus\GdipDrawString",
 				"ptr", this.ptr,
-				"wstr", str,
-				"int", str.length,
+				"wstr", str "",
+				"int", StrLen(str),
 				"ptr", hFont,
 				"ptr", rectF,
 				"ptr", hFormat,
 				"ptr", brush
 			) ? unset : this)
 		}
-	}
-	static GraphicsFromBitmap(bm) {
-		g := this.Graphics()
-		g.ptr := (DllCall("GdiPlus\GdipGetImageGraphicsContext", "ptr", bm, "uptrp", &_ := 0), _)
-		return g
-	}
-	static GraphicsFromDC(dc := 0) {
-		g := this.Graphics()
-		g.ptr := (DllCall("GdiPlus\GdipCreateFromHDC", "uptr", IsInteger(dc) ? dc : dc.handle, "uptrp", &_ := 0), _)
-		return g
-	}
-	static GraphicsFromHWND(hwnd) {
-		g := this.Graphics()
-		g.ptr := (DllCall("GdiPlus\GdipCreateFromHWND", "uptr", hwnd, "uptrp", &_ := 0), _)
-		return g
 	}
 	Class Brush {
 		ptr := 0
@@ -368,7 +465,7 @@ Class Gdip {
 			if colorOrBrush is Gdip.Brush
 				this.ptr := (DllCall("GdiPlus\GdipCreatePen2", "ptr", colorOrBrush, "float", width, "int", 0, "uptrp", &_ := 0), _)
 			else
-				this.ptr := (DllCall("GdiPlus\GdipCreatePen1", "uint", colorOrBrush + 0, "float", width, "int", 0, "uptrp", &_ := 0), _)			
+				this.ptr := (DllCall("GdiPlus\GdipCreatePen1", "uint", colorOrBrush + 0, "float", width, "int", 0, "uptrp", &_ := 0), _)
 		}
 	}
 	Class Region {
@@ -378,9 +475,95 @@ Class Gdip {
 		CombineRect(x, y, w, h, mode) => (DllCall("GdiPlus\GdipCombineRegionRect", "ptr", this, "float", x, "float", y, "float", w, "float", h, "int", mode), this)
 		Delete() => (DllCall("GdiPlus\GdipDeleteRegion", "ptr", this), this)
 	}
-	static CreateRegion() => (r := this.Region(), r.ptr := (DllCall("GdiPlus\GdipCreateRegion", "uptrp", &_ := 0), _), r)
-	static CreateRegionRect(x, y, w, h) => (r := this.Region(), r.ptr := (DllCall("GdiPlus\GdipCreateRegionRect", "float", x, "float", y, "float", w, "float", h, "uptrp", &_ := 0), _), r)
-	static CreateRegionPath(path) => (r := this.Region(), r.ptr := (DllCall("GdiPlus\GdipCreateRegionPath", "ptr", path, "uptrp", &_ := 0), _), r)
+	Class Font {
+		/**
+		 * @param {String} family 
+		 * @param {Integer} size 
+		 * @param {Integer} style
+		 * *0: Regular
+		 * *1: Bold
+		 * *2: Italic
+		 * *4: Underline
+		 * *8: Strikeout
+		 */
+		__New(family, size:=1, style := 0) {
+			DllCall("GdiPlus\GdipCreateFontFamilyFromName", "wstr", family, "ptr", 0, "uptrp", &hFont := 0)
+			this.ptr := this.handle := (DllCall("GdiPlus\GdipCreateFont", "ptr", hFont, "float", size, "int", style is Integer ? style : 0, "int", 0, "uptrp", &_ := 0), _)
+		}
+		Delete() => DllCall("GdiPlus\GdipDeleteFont", "ptr", this)
+		__Delete() {
+			if this.ptr
+				this.Delete()
+		}
+	}
+	Class StringFormat {
+		ptr := 0
+		__New() => this.ptr := (DllCall("GdiPlus\GdipCreateStringFormat", "int", 0, "int", 0, "uptrp", &_ := 0), _)
+		/**
+		 * @param align
+		 * *0: Near
+		 * *1: Center
+		 * *2: Far
+		 * @returns {unset | Gdip.StringFormat}
+		 */
+		setAlignment(align) {
+			if !this.ptr
+				return unset
+			return (DllCall("GdiPlus\GdipSetStringFormatAlign", "ptr", this.ptr, "int", align) ? unset : this)
+		}
+		/**
+		 * @param align
+		 * *0: Near
+		 * *1: Center
+		 * *2: Far
+		 * @returns {unset | Gdip.StringFormat} 
+		 */
+		setLineAlignment(align) {
+			if !this.ptr
+				return unset
+			return (DllCall("GdiPlus\GdipSetStringFormatLineAlign", "ptr", this.ptr, "int", align) ? unset : this)
+		}
+		/**
+		 * @param flags 
+		 * *StringFormatFlagsDirectionRightToLeft = 0x00000001
+		 * *StringFormatFlagsDirectionVertical = 0x00000002
+		 * *StringFormatFlagsNoFitBlackBox = 0x00000004
+		 * *StringFormatFlagsDisplayFormatControl = 0x00000020
+		 * *StringFormatFlagsNoFontFallback = 0x00000400
+		 * *StringFormatFlagsMeasureTrailingSpaces = 0x00000800
+		 * *StringFormatFlagsNoWrap = 0x00001000
+		 * *StringFormatFlagsLineLimit = 0x00002000
+		 * *StringFormatFlagsNoClip = 0x00004000
+		 * @returns {unset | Gdip.StringFormat}
+		 * *unset: failed
+		 * *Gdip.StringFormat: success
+		 */
+		setFormatFlags(flags) {
+			if !this.ptr
+				return unset
+			return (DllCall("GdiPlus\GdipSetStringFormatFlags", "ptr", this.ptr, "int", flags) ? unset : this)
+		}
+		/**
+		 * @param trimming 
+		 * *0: None
+		 * *1: Character
+		 * *2: Word
+		 * *3: EllipsisCharacter
+		 * *4: EllipsisWord
+		 * *5: EllipsisPath
+		 * @returns {unset | Gdip.StringFormat}
+		 * *unset: failed
+		 * *Gdip.StringFormat: success
+		 */
+		setTrimming(trimming) {
+			if !this.ptr || trimming < 0 || trimming > 5
+				return unset
+			return (DllCall("GdiPlus\GdipSetStringFormatTrimming", "ptr", this.ptr, "int", trimming) ? unset : this)
+		}
+	}
+	;?=======================
+	;?======Structures=======
+	;?=======================
 	Class Rect {
 		x: u32
 		y: u32
@@ -399,4 +582,35 @@ Class Gdip {
 		x: i32, y: i32
 		__New(x := 0, y := 0) => (this.x := x, this.y := y)
 	}
+	Class PointF {
+		x: f32, y: f32
+		__New(x := 0, y := 0) => (this.x := x, this.y := y)
+	}
+	class BITMAPINFOHEADER {
+		biSize: u32 := ObjGetDataSize(this)
+		biWidth: i32
+		biHeight: i32
+		biPlanes: u16 := 1
+		biBitCount: u16
+		biCompression: u32
+		biSizeImage: u32
+		biXPelsPerMeter: i32
+		biYPelsPerMeter: i32
+		biClrUsed: u32
+		biClrImportant: u32
+		__New(biWidth?, biHeight?, biBitCount?) {
+			if IsSet(biWidth)
+				this.biWidth := biWidth
+			if IsSet(biHeight)
+				this.biHeight := biHeight
+			if IsSet(biBitCount)
+				this.biBitCount := biBitCount
+			return this
+		}
+	}
 }
+
+bm := Gdip.Bitmap(500, 200)
+g := Gdip.GraphicsFromBitmap(bm)
+g.text("HELLO WORLD!", "s20 x10 y10 w500 h200 center vcenter", Gdip.Brush.Solid(0xFF0000FF))
+bm.save("test.png")
