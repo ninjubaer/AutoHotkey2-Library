@@ -26,16 +26,17 @@ Class Gdip {
 			x := y := 0, w := A_ScreenWidth, h := A_ScreenHeight
 		if !( x ~= "^\d+$") || !( y ~= "^\d+$") || !( w ~= "^\d+$") || !( h ~= "^\d+$") || (w = 0) || (h = 0)
 			return -1
-		ScreenDC := this.GetDC()
-		CDC := this.CreateCompatibleDC(ScreenDC.handle)
-		bm := this.CreateCompatibleBitmap(ScreenDC.handle, w, h)
-		CDC.selectObject(bm.handle)
-		this.BitBlt(CDC.handle, 0, 0, w, h, ScreenDC.handle, x, y)
-		CDC.__Delete()
+		CDC := this.CreateCompatibleDC()
+		bm := this.CreateDIBSection(w, h, CDC.handle)
+		obm := CDC.selectObject(bm.handle)
+		this.BitBlt(CDC.handle, 0, 0, w, h, (ScreenDC := this.DC()).handle, x, y)
 		ScreenDC.release()
+		(bm.ptr)
+		CDC.selectObject(obm)
+		CDC.__Delete()
 		return bm
 	}
-	static BitBlt(hdcDest, x, y, w, h, hdcSrc, x1, y1, raster:="") =>
+	static BitBlt(hdcDest, x, y, w, h, hdcSrc, x1, y1, raster?) =>
 		DllCall("gdi32\BitBlt"
 		, "UPtr", hdcDest
 		, "Int", x
@@ -45,7 +46,7 @@ Class Gdip {
 		, "UPtr", hdcSrc
 		, "Int", x1
 		, "Int", y1
-		, "UInt", Raster ? Raster : 0x00CC0020)
+		, "UInt", Raster ?? 0x00CC0020)
 	static CreateBitmap(w, h, f:=0x26200A) {
 		bm := this.Bitmap()
 		DllCall("GdiPlus\GdipCreateBitmapFromScan0", "uint", w, "uint", h, "int", 0, "uint", f, "ptr", 0, "uptrp", &_ := 0), bm.ptr := _
@@ -56,7 +57,7 @@ Class Gdip {
 		BIH := this.BITMAPINFOHEADER()
 		BIH.biWidth := w, BIH.biHeight := h, BIH.biBitCount := bpp
 		bm := this.Bitmap()
-		bm._handle := DllCall("gdi32\CreateDIBSection", "uptr", hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0)
+		bm._handle := DllCall("gdi32\CreateDIBSection", "uptr", _hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0)
 		if !hdc
 			_hdc.release()
 		return bm
@@ -72,12 +73,12 @@ Class Gdip {
 		biHeight: i32
 		biPlanes: u16 := 1
 		biBitCount: u16
-		biCompression: u32 := 0
+		biCompression: u32
 		biSizeImage: u32
-		biXPelsPerMeter: i32 := 0
-		biYPelsPerMeter: i32 := 0
-		biClrUsed: u32 := 0
-		biClrImportant: u32 := 0
+		biXPelsPerMeter: i32
+		biYPelsPerMeter: i32
+		biClrUsed: u32
+		biClrImportant: u32
 	}
 	Class Bitmap {
 		_handle := 0, _ptr := 0
@@ -95,7 +96,7 @@ Class Gdip {
 				return this._ptr
 			}
 		}
-		handle => this._handle := (DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "ptr", this, "uptrp", &_ := 0, "int", 0), _)
+		handle => (this._handle ?? 0) || this._handle := (DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "ptr", this, "uptrp", &_ := 0, "int", 0), _)
 		w => (DllCall("gdiplus\GdipGetImageWidth", "ptr", this, "uintp", &_ := 0), _)
 		h => (DllCall("gdiplus\GdipGetImageHeight", "ptr", this, "uintp", &_ := 0), _)
 		/**
@@ -152,9 +153,9 @@ Class Gdip {
 				return this.h
 			}
 			set {
-				this.release()
+				if this.h ?? 0
+					this.release()
 				this.h := value
-				this._ptr := (DllCall("GdiPlus\GdipCreateFromHDC", "uptr", this.h, "uptrp", &_ := 0), _)
 				return Value
 			}
 		}
@@ -180,9 +181,9 @@ Class Gdip {
 		}
 		Delete() => DllCall("DeleteDC", "uptr", this.h)
 	}
-	static CreateCompatibleDC(dc := 0) => (ndc := this.DC(), ndc.handle:= DllCall("CreateCompatibleDC", "uptr", dc), ndc)
-	static GetDC(hwnd?) => (dc := this.DC(), dc.handle := DllCall("GetDC", "uptr", dc.hwnd := hwnd ?? 0), dc)
+	static CreateCompatibleDC(dc := 0) => (ndc := this.DC(), ndc.h:= DllCall("CreateCompatibleDC", "uptr", dc is Gdip.DC ? dc.handle : dc), ndc)
+	static GetDC(hwnd?) => (dc := this.DC(), dc.h := DllCall("GetDC", "uptr", dc.hwnd := hwnd ?? 0), dc)
 }
-
+#Include %A_MyDocuments%\AutoHotkey\NatroMacroDev\lib\Gdip_All.ahk
 Bitmap := Gdip.BitmapFromScreen()
-Bitmap.save('test.png')
+Bitmap.save("test.png")
