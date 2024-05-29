@@ -13,7 +13,7 @@ class Timer {
 	static compare(args*) {
 		for i,j in args {
 			this.t%i% := this.__Call( j* )
-			out .= j[1].name " ➔ " this.t%i%/this.count " µs per iteration`n"
+			out .= j[1].name " ➔ " this.t%i%/this.count " µs per iteration (" this.t%i%/this.count / 1000 "ms)`n"
 		}
 		MsgBox out
 	}

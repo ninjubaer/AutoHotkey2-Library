@@ -203,6 +203,61 @@ Class Gdip {
 			return this
 		}
 	}
+	Class Path {
+		ptr := 0
+		__New() {
+			this.ptr := (DllCall("GdiPlus\GdipCreatePath", "uint", 0, "uptrp", &_ := 0), _)
+		}
+		addPathArc(x, y, w, h, start, sweep) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipAddPathArc",
+				"ptr", this,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h,
+				"float", start,
+				"float", sweep
+			) ? unset : this)
+		}
+		addPathEllipse(x, y, w, h) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipAddPathEllipse",
+				"ptr", this,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h
+			) ? unset : this)
+		}
+		addPathPolygon(points*) {
+			if !this.ptr or !points.length
+				return unset
+			pts := Buffer(8 * points.length, 0)
+			if points[1] is Array {
+				for i, point in points
+					NumPut("float", point[1], "float", point[2], pts, 8 * (i - 1))
+			}
+			else
+				for i, point in points
+					NumPut("float", point.x, "float", point.y, pts, 8 * (i - 1))
+			return (DllCall(
+				"GdiPlus\GdipAddPathPolygon",
+				"ptr", this,
+				"ptr", pts,
+				"uint", points.length
+			) ? unset : this)
+		}
+		closePathFigure() {
+			if !this.ptr
+				return unset
+			return (DllCall("GdiPlus\GdipClosePathFigure", "ptr", this) ? unset : this)
+		}
+	}
 	Class DC {
 		h := 0, hwnd := 0
 		handle {
@@ -254,7 +309,7 @@ Class Gdip {
 				return unset
 			return (DllCall(
 				"GdiPlus\GdipFillRectangle",
-				"ptr", this.ptr,
+				"ptr", this,
 				"ptr", brush,
 				"float", x,
 				"float", y,
@@ -279,17 +334,34 @@ Class Gdip {
 			region.Delete()
 			return this
 		}
+		FillRoundedRectanglePath(brush, x, y, w, h, r) {
+			if !this.ptr
+				return unset
+			path := Gdip.Path()
+			d := r*2, w-= d, h-= d
+			path.addPathArc(x, y, d, d, 180, 90)
+			path.addPathArc(x + w, y, d, d, 270, 90)
+			path.addPathArc(x + w, y + h, d, d, 0, 90)
+			path.addPathArc(x, y + h, d, d, 90, 90)
+			path.closePathFigure()
+			return this.FillPath(brush, path)
+		}
+		FillPath(brush, path) {
+			if !this.ptr || !path || !brush
+				return unset
+			return (DllCall("GdiPlus\GdipFillPath", "ptr", this, "ptr", brush, "ptr", path, "uptr", 0) ? unset : this)
+		}
 		SetClipRect(x, y, w, h, mode := 0) {
 			if !this.ptr
 				return unset
-			return (DllCall("GdiPlus\GdipSetClipRect", "ptr", this.ptr, "float", x, "float", y, "float", w, "float", h, "int", mode) ? unset : this)
+			return (DllCall("GdiPlus\GdipSetClipRect", "ptr", this, "float", x, "float", y, "float", w, "float", h, "int", mode) ? unset : this)
 		}
 		FillEllipse(brush, x, y, w, h) {
 			if !this.ptr
 				return unset
 			return (DllCall(
 				"GdiPlus\GdipFillEllipse",
-				"ptr", this.ptr,
+				"ptr", this,
 				"ptr", brush,
 				"float", x,
 				"float", y,
@@ -322,7 +394,7 @@ Class Gdip {
 				return unset
 			return (DllCall(
 				"GdiPlus\GdipFillPie",
-				"ptr", this.ptr,
+				"ptr", this,
 				"ptr", brush,
 				"float", x,
 				"float", y,
@@ -337,12 +409,12 @@ Class Gdip {
 				return unset
 			return (DllCall(
 				"GdiPlus\GdipFillRegion",
-				"ptr", this.ptr,
+				"ptr", this,
 				"ptr", brush,
 				"ptr", region
 			) ? unset : this)
 		}
-		Delete() => DllCall("GdiPlus\GdipDeleteGraphics", "ptr", this.ptr)
+		Delete() => DllCall("GdiPlus\GdipDeleteGraphics", "ptr", this)
 		__Delete() {
 			if this.ptr
 				this.Delete()
@@ -351,13 +423,13 @@ Class Gdip {
 			if !this.ptr
 				return unset
 			r := Gdip.CreateRegion()
-			DllCall("GdiPlus\GdipGetClip", "ptr", this.ptr, "ptr", r)
+			DllCall("GdiPlus\GdipGetClip", "ptr", this, "ptr", r)
 			return r
 		}
 		SetClipRegion(region, mode := 0) {
 			if !this.ptr || !region is Gdip.Region
 				return unset
-			return (DllCall("GdiPlus\GdipSetClipRegion", "ptr", this.ptr, "ptr", region, "int", mode) ? unset : this)
+			return (DllCall("GdiPlus\GdipSetClipRegion", "ptr", this, "ptr", region, "int", mode) ? unset : this)
 		}
 		/**
 		 * @param {String} text
@@ -413,7 +485,7 @@ Class Gdip {
 				return unset
 			return (DllCall(
 				"GdiPlus\GdipDrawString",
-				"ptr", this.ptr,
+				"ptr", this,
 				"wstr", str "",
 				"int", StrLen(str),
 				"ptr", hFont,
@@ -425,7 +497,7 @@ Class Gdip {
 	}
 	Class Brush {
 		ptr := 0
-		Delete() => DllCall("GdiPlus\GdipDeleteBrush", "ptr", this.ptr)
+		Delete() => DllCall("GdiPlus\GdipDeleteBrush", "ptr", this)
 		__Delete() {
 			if this.ptr
 				this.Delete()
@@ -456,7 +528,7 @@ Class Gdip {
 	}
 	Class Pen {
 		ptr := 0
-		Delete() => DllCall("GdiPlus\GdipDeletePen", "ptr", this.ptr)
+		Delete() => DllCall("GdiPlus\GdipDeletePen", "ptr", this)
 		__Delete() {
 			if this.ptr
 				this.Delete()
@@ -509,7 +581,7 @@ Class Gdip {
 		setAlignment(align) {
 			if !this.ptr
 				return unset
-			return (DllCall("GdiPlus\GdipSetStringFormatAlign", "ptr", this.ptr, "int", align) ? unset : this)
+			return (DllCall("GdiPlus\GdipSetStringFormatAlign", "ptr", this, "int", align) ? unset : this)
 		}
 		/**
 		 * @param align
@@ -521,7 +593,7 @@ Class Gdip {
 		setLineAlignment(align) {
 			if !this.ptr
 				return unset
-			return (DllCall("GdiPlus\GdipSetStringFormatLineAlign", "ptr", this.ptr, "int", align) ? unset : this)
+			return (DllCall("GdiPlus\GdipSetStringFormatLineAlign", "ptr", this, "int", align) ? unset : this)
 		}
 		/**
 		 * @param flags 
@@ -541,7 +613,7 @@ Class Gdip {
 		setFormatFlags(flags) {
 			if !this.ptr
 				return unset
-			return (DllCall("GdiPlus\GdipSetStringFormatFlags", "ptr", this.ptr, "int", flags) ? unset : this)
+			return (DllCall("GdiPlus\GdipSetStringFormatFlags", "ptr", this, "int", flags) ? unset : this)
 		}
 		/**
 		 * @param trimming 
@@ -558,7 +630,7 @@ Class Gdip {
 		setTrimming(trimming) {
 			if !this.ptr || trimming < 0 || trimming > 5
 				return unset
-			return (DllCall("GdiPlus\GdipSetStringFormatTrimming", "ptr", this.ptr, "int", trimming) ? unset : this)
+			return (DllCall("GdiPlus\GdipSetStringFormatTrimming", "ptr", this, "int", trimming) ? unset : this)
 		}
 	}
 	;?=======================
@@ -609,8 +681,4 @@ Class Gdip {
 		}
 	}
 }
-
-bm := Gdip.Bitmap(500, 200)
-g := Gdip.GraphicsFromBitmap(bm)
-g.text("HELLO WORLD!", "s20 x10 y10 w500 h200 center vcenter", Gdip.Brush.Solid(0xFF0000FF))
-bm.save("test.png")
+;?=======================
