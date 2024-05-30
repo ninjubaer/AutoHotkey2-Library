@@ -5,7 +5,7 @@
  * @date 2024/05/29
  * @version 0.0.1
  ***********************************************************************/
-
+#include Clipboard.ahk
 ;import { msgbox } from msgbox
 Class Gdip {
 	;?=======================
@@ -26,7 +26,7 @@ Class Gdip {
 	}
 	;?=======================
 	static deleteObject(handle) => DllCall("gdi32\DeleteObject", "uptr", handle)
-	static UpdateLayeredWindow(hwnd, hdc, x?, y?, w?, h?, a:=255) {
+	static UpdateLayeredWindow(hwnd, hdc, x?, y?, w?, h?, a := 255) {
 		if IsSet(x) && IsSet(y) && x is Number && y is Number
 			point := this.Point(x, y)
 		if !IsSet(w) || !IsSet(h) || not (w is Number) || not (h is Number)
@@ -40,7 +40,7 @@ Class Gdip {
 			"uptr", hdc,
 			"int64p", 0,
 			"uint", 0,
-			"uintp", (Alpha??0)<<16|1<<24,
+			"uintp", (Alpha ?? 0) << 16 | 1 << 24,
 			"uint", 2
 		)
 	}
@@ -68,30 +68,24 @@ Class Gdip {
 		if !(x ~= "^\d+$") || !(y ~= "^\d+$") || !(w ~= "^\d+$") || !(h ~= "^\d+$") || (w = 0) || (h = 0)
 			return unset
 		CDC := this.CreateCompatibleDC()
-		bm := this.CreateDIBSection(w, h, CDC.handle)
-		obm := CDC.selectObject(bm.handle)
+		hbm := this.CreateDIBSection(w, h, CDC.handle)
+		obm := CDC.selectObject(hbm)
 		this.BitBlt(CDC.handle, 0, 0, w, h, (ScreenDC := this.DC()).handle, x, y)
 		ScreenDC.release()
-		(bm.ptr)
 		CDC.selectObject(obm)
 		CDC.__Delete()
-		return bm
+		return hbm.CreateBitmap()
 	}
 	static CreateBitmap(w, h, f := 0x26200A) => Gdip.Bitmap(w, h, f)
 	static CreateDIBSection(w, h, hdc := 0, bpp := 32, &_?) {
 		_hdc := hdc || this.GetDC()
-		BIH := this.BITMAPINFOHEADER(w,h,bpp)
-		bm := this.Bitmap()
-		bm._handle := DllCall("gdi32\CreateDIBSection", "uptr", _hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0)
+		BIH := this.BITMAPINFOHEADER(w, h, bpp)
+		hbm := this.HBITMAP(DllCall("gdi32\CreateDIBSection", "uptr", _hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0))
 		if !hdc
 			_hdc.release()
-		return bm
+		return hbm
 	}
-	static CreateCompatibleBitmap(hdc, w, h) {
-		bm := this.Bitmap()
-		bm._handle := DllCall("gdi32\CreateCompatibleBitmap", "uptr", hdc, "int", w, "int", h, "uptr", 0)
-		return bm
-	}
+	static CreateCompatibleBitmap(hdc, w, h) => this.HBITMAP(DllCall("gdi32\CreateCompatibleBitmap", "uptr", hdc, "int", w, "int", h, "uptr", 0))
 	;?=======================
 	;?==========hDC==========
 	;?=======================
@@ -106,7 +100,7 @@ Class Gdip {
 			, "Int", x1
 			, "Int", y1
 			, "UInt", Raster ?? 0x00CC0020)
-			static CreateCompatibleDC(dc := 0) => (ndc := this.DC(), ndc.h := DllCall("CreateCompatibleDC", "uptr", dc is Gdip.DC ? dc.handle : dc), ndc)
+	static CreateCompatibleDC(dc := 0) => (ndc := this.DC(), ndc.h := DllCall("CreateCompatibleDC", "uptr", dc is Gdip.DC ? dc.handle : dc), ndc)
 	static GetDC(hwnd?) => (dc := this.DC(), dc.h := DllCall("GetDC", "uptr", dc.hwnd := hwnd ?? 0), dc)
 	static GetDCEx(hwnd, region, flags) => (dc := this.DC(), dc.h := DllCall("GetDCEx", "uptr", hwnd, "ptr", region, "uint", flags), dc)
 	;?=======================
@@ -136,23 +130,64 @@ Class Gdip {
 	;?=======================
 	;?========Classes========
 	;?=======================
-	Class Bitmap {
-		_handle := 0, _ptr := 0
+	Class HBITMAP {
+		_ptr := 0
+		Delete() => DllCall("gdi32\DeleteObject", "uptr", this.ptr)
 		__Delete() {
-			DllCall("gdiplus\GdipDisposeImage", "ptr", this)
-			if this._handle ?? 0
-				Gdip.DeleteObject(this._handle)
+			if this.ptr
+				this.Delete()
 		}
 		ptr {
-			get {
-				if !this._handle && !this._ptr
-					return 0
-				if !this._ptr
-					this._ptr := (DllCall("GdiPlus\GdipCreateBitmapFromHBITMAP", "uptr", this._handle, "uptr", 0, "uptrp", &_ := 0), _)
-				return this._ptr
+			get => this._ptr
+			set {
+				if this._ptr
+					this.Delete()
+				this._ptr := value
+				return value
 			}
 		}
-		handle => (this._handle ?? 0) || this._handle := (DllCall("gdiplus\GdipCreateHBITMAPFromBitmap", "ptr", this, "uptrp", &_ := 0, "int", 0), _)
+		__New(ptr?) {
+			if IsSet(ptr)
+				this.ptr := ptr
+			return this
+		}
+		CreateBitmap() {
+			if !this.ptr
+				return unset
+			return Gdip.Bitmap((DllCall("GdiPlus\GdipCreateBitmapFromHBITMAP", "uptr", this.ptr, "uptr", 0, "uptrp", &_ := 0), _))
+		}
+		toClipboard() {
+			if !this.ptr
+				return unset
+			static off1 := A_PtrSize = 8 ? 52 : 44, off2 := A_PtrSize = 8 ? 32 : 24
+			bi := Buffer(64 + 5 * A_PtrSize, 0)
+			DllCall("GetObjectW", "uptr", this.ptr, "int", bi.Size, "ptr", bi)
+			hdib := DllCall("GlobalAlloc", "UInt", 2, "UPtr", 40 + NumGet(bi, off1, "UInt"), "UPtr")
+			pdib := DllCall("GlobalLock", "UPtr", hdib, "UPtr")
+			DllCall("RtlMoveMemory", "UPtr", pdib, "UPtr", bi.Ptr + off2, "UPtr", 40)
+			DllCall("RtlMoveMemory", "UPtr", pdib + 40, "UPtr", NumGet(bi, off2 - (A_PtrSize ? A_PtrSize : 4), "UPtr"), "UPtr", NumGet(bi, off1, "UInt"))
+			DllCall("GlobalUnlock", "UPtr", hdib)
+			DllCall("user32\OpenClipboard", "uptr", 0)
+			DllCall("user32\EmptyClipboard")
+			DllCall("user32\SetClipboardData", "uint", 8, "ptr", hdib)
+			DllCall("user32\CloseClipboard")
+			return this
+		}
+	}
+	Class Bitmap {
+		_ptr := 0
+		__Delete() {
+			DllCall("gdiplus\GdipDisposeImage", "ptr", this)
+		}
+		ptr {
+			get => this._ptr
+			set {
+				if this._ptr
+					DllCall("gdiplus\GdipDisposeImage", "ptr", this._ptr)
+				this._ptr := value
+				return value
+			}
+		}
 		w => (DllCall("gdiplus\GdipGetImageWidth", "ptr", this, "uintp", &_ := 0), _)
 		h => (DllCall("gdiplus\GdipGetImageHeight", "ptr", this, "uintp", &_ := 0), _)
 		/**
@@ -197,9 +232,18 @@ Class Gdip {
 		}
 		dispose() => (DllCall("GdiPlus\GdipDisposeImage", "ptr", this), this)
 		__New(w?, h?, format?) {
+			if IsSet(w) && !IsSet(h)
+				return (this.ptr := w, this)
 			if !IsSet(w) || !IsSet(h)
 				return this
 			this._ptr := (DllCall("GdiPlus\GdipCreateBitmapFromScan0", "uint", w, "uint", h, "int", 0, "uint", f ?? 0x26200A, "ptr", 0, "uptrp", &_ := 0), _)
+			return this
+		}
+		CreateHBITMAP() => Gdip.HBITMAP((DllCall("GdiPlus\GdipCreateHBITMAPFromBitmap", "ptr", this, "uptrp", &_ := 0, "uint", 0), _))
+		toClipboard() {
+			hbm := this.CreateHBITMAP()
+			hbm.toClipboard()
+			hbm.Delete()
 			return this
 		}
 	}
@@ -257,6 +301,24 @@ Class Gdip {
 				return unset
 			return (DllCall("GdiPlus\GdipClosePathFigure", "ptr", this) ? unset : this)
 		}
+		addString(str, font, style, size, StringFormat, x, y, w, h) {
+			if !this.ptr
+				return unset
+			rectf := Gdip.RectF(x, y, w, h)
+			return DllCall(
+				"GdiPlus\GdipAddPathString",
+				"ptr", this,
+				"wstr", str,
+				"int", -1,
+				"ptr", font,
+				"int", style,
+				"float", size,
+				"ptr", rectf,
+				"ptr", StringFormat
+			)
+		}
+		Delete() => DllCall("GdiPlus\GdipDeletePath", "ptr", this)
+
 	}
 	Class DC {
 		h := 0, hwnd := 0
@@ -294,7 +356,7 @@ Class Gdip {
 		selectObject(obj) {
 			if !this.h
 				return 0
-			return DllCall("SelectObject", "uptr", this.handle, "uptr", obj)
+			return DllCall("SelectObject", "uptr", this.handle, "ptr", obj)
 		}
 		__Delete() {
 			this.release()
@@ -338,7 +400,7 @@ Class Gdip {
 			if !this.ptr
 				return unset
 			path := Gdip.Path()
-			d := r*2, w-= d, h-= d
+			d := r * 2, w -= d, h -= d
 			path.addPathArc(x, y, d, d, 180, 90)
 			path.addPathArc(x + w, y, d, d, 270, 90)
 			path.addPathArc(x + w, y + h, d, d, 0, 90)
@@ -414,6 +476,63 @@ Class Gdip {
 				"ptr", region
 			) ? unset : this)
 		}
+		DrawRectangle(pen, x, y, w, h) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawRectangle",
+				"ptr", this,
+				"ptr", pen,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h
+			) ? unset : this)
+		}
+		DrawRoundedRectanglePath(pen, x, y, w, h, r) {
+			if !this.ptr
+				return unset
+			path := Gdip.Path()
+			d := r * 2, w -= d, h -= d
+			path.addPathArc(x, y, d, d, 180, 90)
+			path.addPathArc(x + w, y, d, d, 270, 90)
+			path.addPathArc(x + w, y + h, d, d, 0, 90)
+			path.addPathArc(x, y + h, d, d, 90, 90)
+			path.closePathFigure()
+			return this.drawPath(path, pen)
+		}
+		DrawRoundedRectangle(pen, x, y, w, h, r) {
+			if !this.ptr
+				return unset
+			region := this.GetClipRegion()
+			this.SetClipRect(x - r, y - r, r * 2, r * 2, 4)
+			this.SetClipRect(x + w - r, y - r, r * 2, r * 2, 4)
+			this.SetClipRect(x - r, y + h - r, r * 2, r * 2, 4)
+			this.SetClipRect(x + w - r, y + h - r, r * 2, r * 2, 4)
+			this.DrawRectangle(pen, x, y, w, h)
+			this.resetClip()
+			this.SetClipRect(x-(2*r), y+r, w+(4*r), h-(2*r), 4)
+			this.SetClipRect(x+r, y-(2*r), w-(2*r), h+(4*r), 4)
+			this.DrawEllipse(pen, x, y, r * 2, r * 2)
+			this.DrawEllipse(pen, x + w - r * 2, y, r * 2, r * 2)
+			this.DrawEllipse(pen, x, y + h - r * 2, r * 2, r * 2)
+			this.DrawEllipse(pen, x + w - r * 2, y + h - r * 2, r * 2, r * 2)
+			region.Delete()
+			return this
+		}
+		DrawEllipse(pen, x, y, w, h) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawEllipse",
+				"ptr", this,
+				"ptr", pen,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h
+			) ? unset : this)
+		}
 		Delete() => DllCall("GdiPlus\GdipDeleteGraphics", "ptr", this)
 		__Delete() {
 			if this.ptr
@@ -431,6 +550,11 @@ Class Gdip {
 				return unset
 			return (DllCall("GdiPlus\GdipSetClipRegion", "ptr", this, "ptr", region, "int", mode) ? unset : this)
 		}
+		resetClip() {
+			if !this.ptr
+				return unset
+			return (DllCall("GdiPlus\GdipResetClip", "ptr", this) ? unset : this)
+		}
 		/**
 		 * @param {String} text
 		 * @param {String} options
@@ -439,8 +563,8 @@ Class Gdip {
 		 * * y{y} : default 0
 		 * * w{width} : default 100
 		 * * h{height} : default 100
-		 * * align: {center|left/near|right/far} : default near
-		 * * vertical align: {vcenter|top/vnear|bottom/vfar} : default vnear
+		 * * {center|left/near|right/far} : horizontal align, default near
+		 * * {vcenter|top/vnear|bottom/vfar} : vertical align, default vnear
 		 * * NoWrap : default false
 		 * @param {Gdip.Brush} brush 
 		 * @param {String} font 
@@ -456,7 +580,7 @@ Class Gdip {
 		 * *StringFormatFlagsNoClip = 0x00004000
 		 * @returns {unset | Gdip.Graphics} 
 		 */
-		text(text, options, brush?, font:='Arial', flags?) {
+		text(text, options, brush?, font := 'Arial', flags?) {
 			static regex := {
 				size: "s\K[\-\d\.]+",
 				x: "x\K[\-\d\.]+",
@@ -469,9 +593,9 @@ Class Gdip {
 			}
 			if !this.ptr
 				return unset
-			_options := {size: 12, x: 0, y: 0, w: width ?? 100, h: height ?? 100, align: 0, valign: 0, NoWrap: 0}
+			_options := { size: 12, x: 0, y: 0, w: width ?? 100, h: height ?? 100, align: 0, valign: 0, NoWrap: 0 }
 			for i, j in regex.OwnProps()
-				if (m:=(RegExMatch(options, 'i)' j, &match), match?match.0:""))
+				if (m := (RegExMatch(options, 'i)' j, &match), match ? match.0 : ""))
 					_options.%i% := StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(m, "v", ""), "Near", 0), "Center", 1), "Far", 2), "Left", 0), "Right", 2), "Top", 0), "Bottom", 2), "NoWrap", 0x1000)
 			_font := Gdip.Font(font, _options.size)
 			_format := Gdip.StringFormat()
@@ -494,6 +618,45 @@ Class Gdip {
 				"ptr", brush
 			) ? unset : this)
 		}
+		DrawOrientedString(str, options, BrushOrPen?, angle := 0, font := 'Arial', style := 0) {
+			static Regex := {
+				size: "s\K[\-\d\.]+",
+				x: "x\K[\-\d\.]+",
+				y: "y\K[\-\d\.]+",
+				w: "w\K[\-\d\.]+",
+				h: "h\K[\-\d\.]+",
+				align: "(Near|Center|Far|Left|Right)",
+				valign: "(vNear|vCenter|vFar|Top|Bottom)",
+			}
+			if !this.ptr || (IsSet(BrushOrPen) && !BrushOrPen)
+				return unset
+			_options := { size: 12, x: 0, y: 0, w: width ?? 100, h: height ?? 100, align: 0, valign: 0 }
+			for i, j in regex.OwnProps()
+				if (m := (RegExMatch(options, 'i)' j, &match), match ? match.0 : ""))
+					_options.%i% := StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(StrReplace(m, "v", ""), "Near", 0), "Center", 1), "Far", 2), "Left", 0), "Right", 2), "Top", 0), "Bottom", 2)
+			_font := Gdip.Font(font, _options.size)
+			_format := Gdip.StringFormat()
+			_format.setAlignment(_options.align), _format.setLineAlignment(_options.valign)
+			_brush := BrushOrPen ?? Gdip.Brush.Solid(0xFF000000)
+
+			path := Gdip.Path()
+			e := path.addString(str "", _font, style, _options.size, _format, _options.x, _options.y, _options.w, _options.h) ?? ""
+			msgbox e
+			if !e
+				e := this.drawPath(path, BrushOrPen) || ""
+			path.Delete()
+			return (IsSet(e) ? this : unset)
+		}
+		drawPath(path, BrushOrPen) {
+			if !this.ptr || !path || !BrushOrPen
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawPath",
+				"ptr", this,
+				"ptr", BrushOrPen,
+				"ptr", path
+			))
+		}
 	}
 	Class Brush {
 		ptr := 0
@@ -501,6 +664,11 @@ Class Gdip {
 		__Delete() {
 			if this.ptr
 				this.Delete()
+		}
+		CreatePen(width := 1) {
+			if !this.ptr
+				return unset
+			return Gdip.Pen(this, width)
 		}
 		Class Solid extends Gdip.Brush {
 			__New(color) =>
@@ -513,7 +681,8 @@ Class Gdip {
 			Call(*) => this
 		}
 		Class Line extends Gdip.Brush {
-			__New(x1, y1, x2, y2, color1, color2, wrap := 0) => this.ptr := (DllCall("GdiPlus\GdipCreateLineBrush", "ptr", Gdip.Point(x1, y1), "ptr", Gdip.Point(x2, y2), "uint", color1 + 0, "uint", color2 + 0, "uint", wrap, "uptrp", &_ := 0), _)
+			__New(x1, y1, x2, y2, color1, color2, wrap := 0) => 
+				this.ptr := (DllCall("GdiPlus\GdipCreateLineBrush", "ptr", Gdip.PointF(x1, y1), "ptr", Gdip.PointF(x2, y2), "uint", color1 + 0, "uint", color2 + 0, "uint", wrap, "uptrp", &_ := 0), _)
 			Call(*) => this
 		}
 		Class Texture extends Gdip.Brush {
@@ -558,7 +727,7 @@ Class Gdip {
 		 * *4: Underline
 		 * *8: Strikeout
 		 */
-		__New(family, size:=1, style := 0) {
+		__New(family, size := 1, style := 0) {
 			DllCall("GdiPlus\GdipCreateFontFamilyFromName", "wstr", family, "ptr", 0, "uptrp", &hFont := 0)
 			this.ptr := this.handle := (DllCall("GdiPlus\GdipCreateFont", "ptr", hFont, "float", size, "int", style is Integer ? style : 0, "int", 0, "uptrp", &_ := 0), _)
 		}
@@ -655,7 +824,8 @@ Class Gdip {
 		__New(x := 0, y := 0) => (this.x := x, this.y := y)
 	}
 	Class PointF {
-		x: f32, y: f32
+		x: f32
+		y: f32
 		__New(x := 0, y := 0) => (this.x := x, this.y := y)
 	}
 	class BITMAPINFOHEADER {
@@ -682,3 +852,9 @@ Class Gdip {
 	}
 }
 ;?=======================
+/* bm := Gdip.Bitmap(400, 400)
+G := Gdip.GraphicsFromBitmap(bm)
+G.FillRoundedRectanglePath(Gdip.Brush.Line(0,0,400,400,0xFF00FFFF, 0xFFFF0000), 10, 10, 380, 380, 20)
+.FillRoundedRectangle(Gdip.Brush.Line(0,0,400,400,0xFFFF0000, 0xFF00FFFF), 100, 180, 200,40, 20)
+.text("Hello World", "s20 w400 h400 center vCenter", Gdip.Brush.Solid(0xFFFFFFFF))
+bm.toClipboard() */

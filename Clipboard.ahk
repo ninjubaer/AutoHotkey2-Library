@@ -54,7 +54,9 @@ Class Clipboard {
 	}
 	static hBitmapFromClipboard() {
 		DllCall("OpenClipboard", "UPtr", 0)
-		hBitmap := DllCall("GetClipboardData", "uint", 2) ; CF_BITMAP
+		if IsSet(Gdip) && IsObject(Gdip) && Gdip.HasMethod("HBITMAP")
+			hBitmap := Gdip.HBITMAP(DllCall("GetClipboardData", "uint", 2)) ; CF_BITMAP
+		else hBitmap := DllCall("GetClipboardData", "uint", 2) ; CF_BITMAP
 		DllCall("CloseClipboard")
 		return hBitmap
 	}
@@ -71,9 +73,20 @@ Class Clipboard {
 		DllCall("CloseClipboard")
 	}
 	static CopyBitmap(hBitmap) {
-		DllCall("OpenClipboard", "UPtr", 0)
-		DllCall("EmptyClipboard")
-		DllCall("SetClipboardData", "uint", 2, "uptr", hBitmap)
-		DllCall("CloseClipboard")
+		if !hBitmap
+			return unset
+		static off1 := A_PtrSize = 8 ? 52 : 44, off2 := A_PtrSize = 8 ? 32 : 24
+		bi := Buffer(64 + 5 * A_PtrSize, 0)
+		DllCall("GetObjectW", "uptr", hBitmap, "int", bi.Size, "ptr", bi)
+		hdib := DllCall("GlobalAlloc", "UInt", 2, "UPtr", 40+NumGet(bi, off1, "UInt"), "UPtr")
+		pdib := DllCall("GlobalLock", "UPtr", hdib, "UPtr")
+		DllCall("RtlMoveMemory", "UPtr", pdib, "UPtr", bi.Ptr+off2, "UPtr", 40)
+		DllCall("RtlMoveMemory", "UPtr", pdib+40, "UPtr", NumGet(bi, off2 - (A_PtrSize ? A_PtrSize : 4), "UPtr"), "UPtr", NumGet(bi, off1, "UInt"))
+		DllCall("GlobalUnlock", "UPtr", hdib)
+		DllCall("user32\OpenClipboard", "uptr", 0)
+		DllCall("user32\EmptyClipboard")
+		DllCall("user32\SetClipboardData", "uint", 8, "ptr", hdib) ; CF_DIB
+		DllCall("user32\CloseClipboard")
+		return hBitmap
 	}
 }
