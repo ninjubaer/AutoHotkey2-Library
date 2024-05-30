@@ -26,27 +26,28 @@ Class Gdip {
 	}
 	;?=======================
 	static deleteObject(handle) => DllCall("gdi32\DeleteObject", "uptr", handle)
-	static UpdateLayeredWindow(hwnd, hdc, x?, y?, w?, h?, a := 255) {
-		if IsSet(x) && IsSet(y) && x is Number && y is Number
+	static UpdateLayeredWindow(hwnd, hdc, x?, y?, w?, h?, a?) {
+		if IsSet(x) && IsSet(y)
 			point := this.Point(x, y)
-		if !IsSet(w) || !IsSet(h) || not (w is Number) || not (h is Number)
-			rect := this.WinGetRect(hwnd), w := rect.w, h := rect.h
+		if !IsSet(w) || !IsSet(h)
+			this.WinGetRect(hwnd,,,&w,&h)
 		return DllCall(
 			"user32\UpdateLayeredWindow",
 			"uptr", hwnd,
 			"uptr", 0,
 			"ptr", point ?? 0,
-			"int64p", w | (h << 32),
-			"uptr", hdc,
+			"int64p", w|h << 32,
+			"uptr", IsInteger(hDC) ? hDC : hdc.ptr,
 			"int64p", 0,
 			"uint", 0,
-			"uintp", (Alpha ?? 0) << 16 | 1 << 24,
+			"uintp", (a ?? 255)<<16|1<<24,
 			"uint", 2
 		)
 	}
-	static WinGetRect(hwnd) {
+	static WinGetRect(hwnd,&x?,&y?,&w?,&h?) {
 		rect := this.Rect()
 		DllCall("GetWindowRect", "uptr", hwnd, "ptr", rect)
+		x := rect.x, y := rect.y, w := rect.w-x, h := rect.h-y
 		return rect
 	}
 	;?=======================
@@ -76,11 +77,31 @@ Class Gdip {
 		CDC.__Delete()
 		return hbm.CreateBitmap()
 	}
+	static BitmapFromHWND(hwnd) {
+		this.WinGetRect(hwnd,,,&w,&h)
+		hbm := this.CreateDIBSection(w, h), CDC := this.CreateCompatibleDC(), obm := CDC.selectObject(hbm)
+		DllCall("PrintWindow", "uptr", hwnd, "uptr", CDC.handle, "uint", 0)
+		bm := hbm.CreateBitmap()
+		CDC.selectObject(obm), CDC.__Delete(), hbm.Delete()
+		return bm
+	}
+	static BitmapFromBase64(str) {
+		if !DllCall("crypt32\CryptStringToBinaryW", "ptr", StrPtr(str), "uint", 0, "uint", 0x01, "ptr", 0, "uintp", &size:=0,"ptr", 0, "ptr", 0)
+			return 0
+		hGlobal := DllCall("GlobalAlloc", "uint", 0x42, "uptr", size, "uptr")
+		pGlobal := DllCall("GlobalLock", "uptr", hGlobal, "uptr")
+		if !DllCall("crypt32\CryptStringToBinaryW", "ptr", StrPtr(str), "uint", 0, "uint", 0x01, "ptr", pGlobal, "uintp", &size, "ptr", 0, "ptr", 0)
+			return 0
+		DllCall("GlobalUnlock", "uptr", hGlobal)
+		DllCall("ole32\CreateStreamOnHGlobal", "uptr", hGlobal, "int", 1, "uptrp", &pStream := 0)
+		return this.BitmapFromStream(pStream)
+	}
+	static BitmapFromStream(pStream) => this.Bitmap((DllCall("GdiPlus\GdipCreateBitmapFromStream", "ptr", pStream, "uptrp", &_ := 0), _))
 	static CreateBitmap(w, h, f := 0x26200A) => Gdip.Bitmap(w, h, f)
 	static CreateDIBSection(w, h, hdc := 0, bpp := 32, &_?) {
 		_hdc := hdc || this.GetDC()
 		BIH := this.BITMAPINFOHEADER(w, h, bpp)
-		hbm := this.HBITMAP(DllCall("gdi32\CreateDIBSection", "uptr", _hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0))
+		hbm := this.HBITMAP(DllCall("gdi32\CreateDIBSection", "ptr", _hdc, "ptr", BIH, "uint", 0, "uptrp", &_ := 0, "uptr", 0, "uint", 0))
 		if !hdc
 			_hdc.release()
 		return hbm
@@ -113,7 +134,7 @@ Class Gdip {
 	}
 	static GraphicsFromDC(dc := 0) {
 		g := this.Graphics()
-		g.ptr := (DllCall("GdiPlus\GdipCreateFromHDC", "uptr", IsInteger(dc) ? dc : dc.handle, "uptrp", &_ := 0), _)
+		g.ptr := (DllCall("GdiPlus\GdipCreateFromHDC", "ptr", IsInteger(dc) ? dc : dc, "uptrp", &_ := 0), _)
 		return g
 	}
 	static GraphicsFromHWND(hwnd) {
@@ -533,6 +554,127 @@ Class Gdip {
 				"float", h
 			) ? unset : this)
 		}
+		DrawArc(pen, x, y, w, h, start, sweep) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawArc",
+				"ptr", this,
+				"ptr", pen,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h,
+				"float", start,
+				"float", sweep
+			) ? unset : this)
+		}
+		drawBezier(pen, x1, y1, x2, y2, x3, y3, x4, y4) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawBezier",
+				"ptr", this,
+				"ptr", pen,
+				"float", x1,
+				"float", y1,
+				"float", x2,
+				"float", y2,
+				"float", x3,
+				"float", y3,
+				"float", x4,
+				"float", y4
+			) ? unset : this)
+		}
+		drawPie(pen, x, y, w, h, start, sweep) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawPie",
+				"ptr", this,
+				"ptr", pen,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h,
+				"float", start,
+				"float", sweep
+			) ? unset : this)
+		}
+		drawLine(pen, x1, y1, x2, y2) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipDrawLine",
+				"ptr", this,
+				"ptr", pen,
+				"float", x1,
+				"float", y1,
+				"float", x2,
+				"float", y2
+			) ? unset : this)
+		}
+		drawLines(pen, points*) {
+			if !this.ptr or !points.length
+				return unset
+			pts := Buffer(8 * points.length, 0)
+			if points[1] is Array {
+				for i, point in points
+					NumPut("float", point[1], "float", point[2], pts, 8 * (i - 1))
+			}
+			else
+				for i, point in points
+					NumPut("float", point.x, "float", point.y, pts, 8 * (i - 1))
+			return (DllCall(
+				"GdiPlus\GdipDrawLines",
+				"ptr", this,
+				"ptr", pen,
+				"ptr", pts,
+				"uint", points.length
+			) ? unset : this)
+		}
+		drawCurve(pen, points, tension := 0.5) {
+			if !this.ptr or !points.length
+				return unset
+			pts := Buffer(8 * points.length, 0)
+			if points[1] is Array {
+				for i, point in points
+					NumPut("float", point[1], "float", point[2], pts, 8 * (i - 1))
+			}
+			else
+				for i, point in points
+					NumPut("float", point.x, "float", point.y, pts, 8 * (i - 1))
+			return (DllCall(
+				"GdiPlus\GdipDrawCurve",
+				"ptr", this,
+				"ptr", pen,
+				"ptr", pts,
+				"uint", points.length,
+				"float", tension
+			) ? unset : this)
+		}
+		drawImage(image, x, y, w, h, srcX := 0, srcY := 0, srcW?, srcH?) {
+			if !this.ptr
+				return unset
+			if !IsSet(srcW)
+				srcW := image.w
+			if !IsSet(srcH)
+				srcH := image.h
+			return (DllCall(
+				"GdiPlus\GdipDrawImageRectRect",
+				"ptr", this,
+				"ptr", image,
+				"float", x,
+				"float", y,
+				"float", w,
+				"float", h,
+				"float", srcX,
+				"float", srcY,
+				"float", srcW,
+				"float", srcH
+			) ? unset : this)
+		}
+
 		Delete() => DllCall("GdiPlus\GdipDeleteGraphics", "ptr", this)
 		__Delete() {
 			if this.ptr
@@ -641,7 +783,6 @@ Class Gdip {
 
 			path := Gdip.Path()
 			e := path.addString(str "", _font, style, _options.size, _format, _options.x, _options.y, _options.w, _options.h) ?? ""
-			msgbox e
 			if !e
 				e := this.drawPath(path, BrushOrPen) || ""
 			path.Delete()
@@ -800,6 +941,31 @@ Class Gdip {
 			if !this.ptr || trimming < 0 || trimming > 5
 				return unset
 			return (DllCall("GdiPlus\GdipSetStringFormatTrimming", "ptr", this, "int", trimming) ? unset : this)
+		}
+	}
+	Class Matrix {
+		ptr := 0
+		__New() =>
+			this.ptr := (DllCall("GdiPlus\GdipCreateMatrix", "uptrp", &_ := 0), _)
+		class Affine extends Gdip.Matrix {
+			__New(m11, m12, m21, m22, dx, dy) =>
+				this.ptr := (DllCall("GdiPlus\GdipCreateMatrix2", "float", m11, "float", m12, "float", m21, "float", m22, "float", dx, "float", dy, "uptrp", &_ := 0), _)
+		}
+		__Delete() {
+			if this.ptr
+				this.Delete()
+		}
+		Delete() => DllCall("GdiPlus\GdipDeleteMatrix", "ptr", this)
+		Translate(x, y) {
+			if !this.ptr
+				return unset
+			return (DllCall(
+				"GdiPlus\GdipTranslateMatrix",
+				"ptr", this,
+				"float", x,
+				"float", y,
+				"int", 0
+			) ? unset : this)
 		}
 	}
 	;?=======================
