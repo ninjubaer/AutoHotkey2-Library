@@ -54,8 +54,9 @@ Class JSON {
 		]
 		pos := 1, tokens := []
 		While (pos < StrLen(str)) {
+			s := SubStr(str, pos)
 			for type in types {
-				if (RegExMatch(SubStr(str, pos), type[2], &match)) {
+				if (RegExMatch(s, type[2], &match)) {
 					if type[1] != "whitespace"
 						tokens.Push([type[1], match.0])
 					pos += StrLen(match.0)
