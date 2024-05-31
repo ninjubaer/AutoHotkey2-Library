@@ -386,7 +386,52 @@ Class Gdip {
 		Delete() => DllCall("DeleteDC", "uptr", this.h)
 	}
 	Class Graphics {
-		ptr := 0
+		ptr := 0, _interpolationmode := 0, _smoothingmode := 0, _pixeloffsetmode := 0, _compositingmode := 0,_textrenderhint := 0
+		interpolationmode {
+			get => this._interpolationmode
+			set {
+				if !this.ptr || value < 0 || value > 7
+					return unset
+				this._interpolationmode := Value
+				DllCall("gdiplus\GdipSetInterpolationMode", "ptr", this, "uint", Value)
+			}
+		}
+		smoothingmode {
+			get => this._smoothingmode
+			set {
+				if !this.ptr || value < 0 || value > 4
+					return unset
+				this._smoothingmode := Value
+				DllCall("gdiplus\GdipSetSmoothingMode", "ptr", this, "uint", Value)
+			}
+		}
+		pixeloffsetmode {
+			get => this._pixeloffsetmode
+			set {
+				if !this.ptr || value < 0 || value > 4
+					return unset
+				this._pixeloffsetmode := Value
+				DllCall("gdiplus\GdipSetPixelOffsetMode", "ptr", this, "uint", Value)
+			}
+		}
+		compositingmode {
+			get => this._compositingmode
+			set {
+				if !this.ptr || value < 0 || value > 1
+					return unset
+				this._compositingmode := Value
+				DllCall("gdiplus\GdipSetCompositingMode", "ptr", this, "uint", Value)
+			}
+		}
+		textrenderinghint {
+			get => this._textrenderhint
+			set {
+				if !this.ptr || value < 0 || value > 4
+					return unset
+				this._textrenderhint := Value
+				DllCall("gdiplus\GdipSetTextRenderingHint", "ptr", this, "uint", Value)
+			}
+		}
 		FillRectangle(brush, x, y, w, h) {
 			if !this.ptr
 				return unset
@@ -967,6 +1012,55 @@ Class Gdip {
 				"int", 0
 			) ? unset : this)
 		}
+	}
+	Class Gui {
+		__New(options, title?, eventObj?) {
+			static regex := [
+				{option:"x",regex:"x[\-\d\.]+"},
+				{option:"y",regex:"y[\-\d\.]+"},
+				{option:"w",regex:"w[\-\d\.]+"},
+				{option:"h",regex:"h[\-\d\.]+"},
+				{option:"smoothingmode",regex:"s[0-4]"},
+				{option:"pixeloffsetmode",regex:"p[0-2]"},
+				{option:"compositingquality",regex:"c[0-4]"},
+				{option:"interpolationmode",regex:"i[0-7]"},
+				{option:"textrenderinghint",regex:"t[0-4]"},
+				{option:"xCenter",regex:"xCenter"},
+				{option:"yCenter",regex:"yCenter"},
+				{option:"Center",regex:"Center"},
+				{option:"AutoSize",regex:"AutoSize"},
+				{option:"Minimize", regex:"Minimize"},
+				{option:"Maximize", regex:"Maximize"},
+				{option:"Restore", regex:"Restore"},
+				{option:"NoActivate", regex:"NoActivate"},
+				{option:"NA", regex:"NA"},
+				{option:"Hide", regex:"Hide"}
+			]
+			foundOptions := "", this.w := 200, this.h := 200, this.x:=this.y:=0
+			for i,j in regex
+				if (m := (RegExMatch(options, 'i)' j.regex, &match), match ? match.0 : 0)) {
+					options := StrReplace(options, m), foundOptions .= m
+					if j.option = "x" or j.option = "y" or j.option = "w" or j.option = "h"
+						this.%j.option% := SubStr(m, 2)
+					if j.option = "Center"
+						this.x := (A_ScreenWidth - this.w) // 2, this.y := (A_ScreenHeight - this.h) // 2
+					if j.option = "xCenter"
+						this.x := (A_ScreenWidth - this.w) // 2
+					if j.option = "yCenter"
+						this.y := (A_ScreenHeight - this.h) // 2
+				}
+			this.Gui := Gui("+E0x80000 " options, title?, eventObj?)
+			this.Gui.Show(foundOptions)
+			this.hbm := Gdip.CreateDIBSection(this.w, this.h)
+			this.hdc := Gdip.CreateCompatibleDC()
+			this.obm := this.hdc.SelectObject(this.hbm)
+			this.G := Gdip.GraphicsFromDC(this.hdc)
+			this.G.smoothingmode := 2
+			this.G.interpolationmode := 7
+			Gdip.UpdateLayeredWindow(this.Gui.hwnd, this.hdc, this.x,this.y,this.w,this.h)
+		}
+		update() => (Gdip.UpdateLayeredWindow(this.Gui.hwnd, this.hdc), this)
+
 	}
 	;?=======================
 	;?======Structures=======
