@@ -11,7 +11,8 @@ Class __ArrEx extends Array {
 		[].Base.includes := ObjBindMethod(this, 'includes'),
 		[].Base.forEach := ObjBindMethod(this, 'forEach'),
 		[].Base.find := ObjBindMethod(this, 'find'),
-		[].Base.filter := ObjBindMethod(this, 'filter')
+		[].Base.filter := ObjBindMethod(this, 'filter'),
+		[].Base.join := ObjBindMethod(this, 'join')
 	)
 	static includes(obj, val, sensitivity?) {
 		for i, j in obj
@@ -40,5 +41,10 @@ Class __ArrEx extends Array {
 			if (func.MinParams > 1 ? (func)(i,j) : (func)(j))
 				return j
 		return false
+	}
+	static join(obj, delim:=', ') {
+		for i,j in obj
+			str .= delim . j
+		return SubStr(str, StrLen(delim)+1)
 	}
 }
