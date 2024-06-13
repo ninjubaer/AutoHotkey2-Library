@@ -1,4 +1,4 @@
-﻿HyperSleeps(ms) {
+﻿HyperSleep(ms) {
 	static freq := (DllCall("QueryPerformanceFrequency", "int64p", &freq:=0), freq)
 	DllCall("QueryPerformanceCounter", "int64p", &start:=0)
 	while ((DllCall("QueryPerformanceCounter", "int64p", &end:=0), end) - start) < ms * freq / 1000 {
