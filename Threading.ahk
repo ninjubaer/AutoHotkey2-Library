@@ -58,4 +58,33 @@ Class Thread {
 		set => (this.threadptr ? DllCall("SetThreadDescription", "ptr", this.threadptr, "str", value) : 0, Value)
 		get => (this.threadptr ? DllCall("GetThreadDescription", "ptr", this.threadptr, "strp", &desc := "") : "", desc)
 	}
+	class ThreadPool {
+		static Call(min, max?) {
+			ptr := this.CreateThreadpool()
+			this.SetThreadpoolThreadMinimum(ptr, min)
+			this.SetThreadpoolThreadMaximum(ptr, max ?? min)
+			return { base: Thread.ThreadPool.Prototype, ptr: ptr, env: this.InitializeThreadpoolEnvironment(3, ptr), __Delete: (*) => this.CloseThreadpool(ptr) }
+		}
+		static CreateThreadpool() => DllCall("CreateThreadpool", "ptr", 0)
+		static CloseThreadpool(PTP_POOL) => DllCall("CloseThreadpool", "ptr", PTP_POOL)
+		static SetThreadpoolThreadMinimum(PTP_POOL, min) => DllCall("SetThreadpoolThreadMinimum", "ptr", PTP_POOL, "uint", min)
+		static SetThreadpoolThreadMaximum(PTP_POOL, max) => DllCall("SetThreadpoolThreadMaximum", "ptr", PTP_POOL, "uint", max)
+		static InitializeThreadpoolEnvironment(PTP_POOL, Version?) => (env := this.TP_CALLBACK_ENVIRON(), env.Pool := PTP_POOL ?? 0, IsSet(version) && (env.Version := version), env)
+		static CreateThreadpoolWork(PTP_WORK_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON) => DllCall("CreateThreadpoolWork", "ptr", PTP_WORK_CALLBACK, "ptr", PVOID, "ptr", PTP_CALLBACK_ENVIRON)
+		Class TP_CALLBACK_ENVIRON {
+			Version: u32 := 3,
+			Pool: iptr,
+			CleanupGroup: iptr,
+			CleanupGroupCancelCallback: iptr,
+			RaceDll: iptr,
+			ActivationContext: iptr,
+			FinalizationCallback: iptr,
+			u: u32
+			ptr := ObjPtr(this)
+		}
+	}
 }
+Persistent
+
+TP := Thread.ThreadPool(1,4)
+TPW := Thread.ThreadPool.CreateThreadpoolWork(CallbackCreate(msgbox.Bind("Hello World")), 0, TP.env)
