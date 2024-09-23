@@ -87,4 +87,3 @@ Class Thread {
 Persistent
 
 TP := Thread.ThreadPool(1,4)
-TPW := Thread.ThreadPool.CreateThreadpoolWork(CallbackCreate(msgbox.Bind("Hello World")), 0, TP.env)
