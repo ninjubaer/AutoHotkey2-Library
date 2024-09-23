@@ -5,7 +5,7 @@
  * @date 2024/05/25
  * @version 0.0.1
  ***********************************************************************/
-#Include <JSON>
+#Include JSON.ahk
 class Console {
 	static colors := {
 		black: 0,
